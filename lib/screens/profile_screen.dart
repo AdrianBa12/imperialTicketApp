@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/custom_text_field.dart';
 
@@ -17,7 +19,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late TextEditingController _phoneController;
   bool _isEditing = false;
   bool _isLoading = false;
-
+  File? _profileImage;
 
   @override
   void initState() {
@@ -28,6 +30,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _nameController = TextEditingController(text: user?.displayName ?? '');
     _emailController = TextEditingController(text: user?.email ?? '');
     _phoneController = TextEditingController(text: user?.phoneNumber ?? '');
+    _profileImage = user?.photoURL != null ? File(user!.photoURL!) : null;
   }
 
   @override
@@ -46,8 +49,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final success = await authProvider.updateProfile(
-      displayName: _nameController.text.trim(),
-      phoneNumber: _phoneController.text.trim(),
+        displayName: _nameController.text.trim(),
+        phoneNumber: _phoneController.text.trim(),
+        profileImage: _profileImage,
       );
       setState(() {
         _isLoading = false;
@@ -72,6 +76,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
       Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
     }
   }
+
+  Future<void> _pickImage(ImageSource source) async {
+    final pickedFile = await ImagePicker().pickImage(source: source);
+    if (pickedFile != null) {
+      setState(() {
+        _profileImage = File(pickedFile.path);
+      });
+    }
+  }
+
+  void _showImagePicker(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext bc) {
+        return SafeArea(
+          child: Wrap(
+            children: <Widget>[
+              ListTile(
+                  leading: const Icon(Icons.photo_library),
+                  title: const Text('Galería'),
+                  onTap: () {
+                    _pickImage(ImageSource.gallery);
+                    Navigator.of(context).pop();
+                  }),
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: const Text('Cámara'),
+                onTap: () {
+                  _pickImage(ImageSource.camera);
+                  Navigator.of(context).pop();
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
@@ -98,6 +141,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           : _buildUserProfile(context, user),
     );
   }
+
   Widget _buildGuestView(BuildContext context) {
     return Center(
       child: Column(
@@ -146,17 +190,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Profile header
           Center(
             child: Column(
               children: [
-                const CircleAvatar(
-                  radius: 50,
-                  backgroundColor: Colors.grey,
-                  child: Icon(
-                    Icons.person,
-                    size: 50,
-                    color: Colors.white,
+                GestureDetector(
+                  onTap: () {
+                    if (_isEditing) {
+                      _showImagePicker(context);
+                    }
+                  },
+                  child: CircleAvatar(
+                    radius: 50,
+                    backgroundColor: Colors.grey,
+                    backgroundImage: _profileImage != null ? FileImage(_profileImage!) : null,
+                    child: _profileImage == null
+                        ? const Icon(
+                      Icons.person,
+                      size: 50,
+                      color: Colors.white,
+                    )
+                        : null,
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -171,10 +224,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
             ),
           ),
-
           const SizedBox(height: 32),
-
-          // Profile form
           Form(
             key: _formKey,
             child: Column(
@@ -232,9 +282,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           onPressed: () {
                             setState(() {
                               _isEditing = false;
-                              // Reset controllers to original values
                               _nameController.text = user?.displayName ?? '';
                               _phoneController.text = user?.phoneNumber ?? '';
+                              _profileImage = user?.photoUrl != null ? File(user!.photoUrl!) : null;
                             });
                           },
                           child: const Text('CANCELAR'),
@@ -261,10 +311,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
             ),
           ),
-
           const SizedBox(height: 32),
-
-          // Account actions
           const Text(
             'Cuenta',
             style: TextStyle(
@@ -277,7 +324,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             'Mis Reservas',
             Icons.confirmation_number_outlined,
                 () {
-              // Navigate to bookings screen
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Próximamente, la función de reservas estará disponible')),
               );
@@ -287,7 +333,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             'Métodos de pago guardados',
             Icons.credit_card_outlined,
                 () {
-              // Navigate to payment methods screen
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Próximamente se añadirá la función de métodos de pago')),
               );
@@ -297,7 +342,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             'Cambiar la contraseña',
             Icons.lock_outline,
                 () {
-              // Navigate to change password screen
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Próximamente se añadirá la función de cambio de contraseña')),
               );

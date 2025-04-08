@@ -14,7 +14,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     // Navigate to search screen after a delay
-    Future.delayed(const Duration(milliseconds: 200), () {
+    Future.delayed(const Duration(milliseconds: 2000), () {
       if (!mounted) return;
       Navigator.pushReplacementNamed(context, '/search');
     });

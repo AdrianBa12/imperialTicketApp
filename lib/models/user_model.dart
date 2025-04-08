@@ -8,6 +8,7 @@ class UserModel {
   final List<String> favoriteRoutes;
   final DateTime createdAt;
 
+
   UserModel({
     required this.uid,
     required this.email,

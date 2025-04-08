@@ -99,15 +99,15 @@ class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
       }
 
       if (response['bus'] == null) {
-        throw Exception('Bus data is missing in response');
+        throw Exception('Faltan datos del bus en la respuesta');
       }
 
       if (response['bus']['seats'] == null) {
-        throw Exception('Seats data is missing in bus object');
+        throw Exception('Faltan datos de asientos en el objeto de bus');
       }
 
       if (response['bus']['seats'] is! List) {
-        throw Exception('Seats data is not a list');
+        throw Exception('Los datos de asientos no son una lista');
       }
 
       final seats = (response['bus']['seats'] as List).map((seatJson) {
@@ -259,7 +259,7 @@ class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          '₹${bus.fare.toStringAsFixed(2)}',
+                          'S/${bus.fare.toStringAsFixed(2)}',
                           style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
@@ -443,7 +443,7 @@ class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
                       Text(
                         selectedSeats.isEmpty
                             ? 'No hay asientos seleccionados'
-                            : '${selectedSeats.length} ${selectedSeats.length == 1 ? 'seat' : 'seats'} selected',
+                            : '${selectedSeats.length} ${selectedSeats.length == 1 ? 'asiento' : 'asientos'} seleccionado',
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                         ),

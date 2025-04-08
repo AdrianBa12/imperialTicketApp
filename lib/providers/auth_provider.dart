@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
 import '../models/user_model.dart';
 import '../services/secure_service.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 
 class AuthProvider with ChangeNotifier {
@@ -19,6 +21,8 @@ class AuthProvider with ChangeNotifier {
 
   User? get firebaseUser => _firebaseUser;
   UserModel? get userModel => _userModel;
+
+
   String? get authToken => _authToken;
   bool get isLoading => _isLoading;
   String? get error => _error;
@@ -59,6 +63,8 @@ class AuthProvider with ChangeNotifier {
     await _secureStorage.deleteToken();
     notifyListeners();
   }
+
+
 
 
 
@@ -159,16 +165,29 @@ class AuthProvider with ChangeNotifier {
   Future<bool> updateProfile({
     String? displayName,
     String? phoneNumber,
-    String? photoURL,
+    File? profileImage, // Changed to File?
   }) async {
     _setLoading(true);
     _error = null;
 
     try {
+      String? photoUrl;
+      if (profileImage != null) {
+        // Upload the image to Firebase Storage
+        final user = FirebaseAuth.instance.currentUser; // Get current user
+        if (user != null) {
+          final ref = FirebaseStorage.instance
+              .ref()
+              .child('users/${user.uid}/profile.jpg'); // Storage path
+          await ref.putFile(profileImage);
+          photoUrl = await ref.getDownloadURL();
+        }
+      }
+
       await _authService.updateUserProfile(
         displayName: displayName,
         phoneNumber: phoneNumber,
-        photoURL: photoURL,
+        photoURL: photoUrl, // Pass the download URL
       );
 
       // Refresh user data
