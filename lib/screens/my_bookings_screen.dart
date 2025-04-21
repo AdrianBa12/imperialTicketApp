@@ -155,7 +155,6 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> with SingleTickerPr
       final apiService = ApiService();
       await apiService.cancelBooking(token, ticket.id);
 
-      // Close loading dialog
       Navigator.pop(context);
 
       // Show success message
@@ -167,10 +166,8 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> with SingleTickerPr
         ),
       );
 
-      // Refresh bookings
       _fetchBookings();
     } catch (e) {
-      // Close loading dialog if open
       if (Navigator.canPop(context)) {
         Navigator.pop(context);
       }

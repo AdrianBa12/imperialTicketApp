@@ -1,4 +1,3 @@
-
 class Seat {
   final String id;
   final String number;
@@ -7,7 +6,7 @@ class Seat {
   final bool isTemporarilyHeld;
   final String? bookedBy;
   final String? heldByUserId;
-  final String seatType; // window, aisle, middle
+  final String seatType; 
   final double price;
 
   bool get isAvailable => !isBooked && !isTemporarilyHeld;
@@ -27,7 +26,6 @@ class Seat {
     required this.price,
   });
 
-  /// Crear una copia con valores opcionales
   Seat copyWith({
     String? id,
     String? number,
@@ -68,8 +66,20 @@ class Seat {
     );
 
   }
+  factory Seat.fromMap(Map<String, dynamic> map) {
+    return Seat(
+      id: map['_id'] ?? map['id'] ?? '',
+      number: map['number']?.toString() ?? '',
+      isBooked: map['isBooked'] == true,
+      isSelected: map['isSelected'] == true,
+      isTemporarilyHeld: map['isTemporarilyHeld'] == true,
+      bookedBy: map['bookedBy']?.toString(),
+      heldByUserId: map['heldByUserId']?.toString(),
+      seatType: map['seatType']?.toString() ?? 'normal',
+      price: (map['price'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
 
-  /// Convertir a JSON
   Map<String, dynamic> toJson() {
     return {
       '_id': id,

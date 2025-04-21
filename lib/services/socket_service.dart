@@ -14,7 +14,6 @@ class SocketService {
   // Getters
   bool get isConnected => _isConnected;
   String? get currentUserId => _currentUserId;
-  // Callbacks
   final List<SeatStatusCallback> _seatStatusCallbacks = [];
 
   static Future<void> initSocket() async {
@@ -48,9 +47,6 @@ class SocketService {
     });
   }
 
-
-
-  // Join a bus room to get real-time seat updates
   static void joinBusRoom(String busId, DateTime date) {
     final formattedDate = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
@@ -62,7 +58,6 @@ class SocketService {
     }
   }
 
-  // Leave a bus room
   static void leaveBusRoom(String busId, DateTime date) {
     final formattedDate = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
@@ -80,8 +75,7 @@ class SocketService {
     final userId = prefs.getString('userId') ?? 'guest';
 
     if (_socket != null) {
-      _socket!.emit('select-seat', { // Cambiado de 'select-seats' a 'select-seat'
-        'busId': busId,
+      _socket!.emit('select-seat', { 
         'date': formattedDate,
         'seats': seats,
         'userId': userId,
@@ -95,7 +89,7 @@ class SocketService {
     final userId = prefs.getString('userId') ?? 'guest';
 
     if (_socket != null) {
-      _socket!.emit('deselect-seat', { // Cambiado de 'release-seats' a 'deselect-seat'
+      _socket!.emit('deselect-seat', { 
         'busId': busId,
         'date': formattedDate,
         'seats': seats,
@@ -106,7 +100,7 @@ class SocketService {
 
   static void onSeatsSelected(Function(List<String>, String) callback) {
     if (_socket != null) {
-      _socket!.off('seats-selected'); // Eliminar cualquier listener previo
+      _socket!.off('seats-selected'); 
 
       _socket!.on('seats-selected', (data) {
         callback(List<String>.from(data['seats']), data['userId']);
@@ -118,7 +112,7 @@ class SocketService {
 
   static void onSeatsReleased(Function(List<String>, String) callback) {
     if (_socket != null) {
-      _socket!.off('seats-released'); // Eliminar cualquier listener previo
+      _socket!.off('seats-released'); 
 
       _socket!.on('seats-released', (data) {
         callback(List<String>.from(data['seats']), data['userId']);
@@ -132,7 +126,7 @@ class SocketService {
     final formattedDate = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
     if (_socket != null) {
-      _socket!.emit('booking-confirmed', { // Cambiado de 'new-booking' a 'booking-confirmed'
+      _socket!.emit('booking-confirmed', { 
         'busId': busId,
         'date': formattedDate,
         'seats': seats,
@@ -144,7 +138,7 @@ class SocketService {
     final formattedDate = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
     if (_socket != null) {
-      _socket!.emit('booking-cancelled', { // Cambiado de 'cancel-booking' a 'booking-cancelled'
+      _socket!.emit('booking-cancelled', {
         'busId': busId,
         'date': formattedDate,
         'seats': seats,
@@ -171,9 +165,6 @@ class SocketService {
     }
   }
 
-
-
-  // Remove all listeners
   static void removeAllListeners() {
     if (_socket != null) {
       _listeners.forEach((event, _) {
@@ -184,7 +175,6 @@ class SocketService {
     }
   }
 
-  // Disconnect socket
   static void disconnect() {
     if (_socket != null) {
       _socket!.disconnect();
@@ -192,17 +182,14 @@ class SocketService {
     }
   }
 
-  // Listen for seat status changes
   void onSeatStatusChanged(SeatStatusCallback callback) {
     _seatStatusCallbacks.add(callback);
   }
 
-  // Remove seat status change listener
   void offSeatStatusChanged() {
     _seatStatusCallbacks.clear();
   }
 
-  // Release a seat
   void releaseSeat(String busId, String seatId) {
     if (_isConnected && _socket != null) {
       _socket!.emit('release-seat', {

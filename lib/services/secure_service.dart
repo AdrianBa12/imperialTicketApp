@@ -23,4 +23,16 @@ class SecureStorage {
     await FlutterSecureStorage().write(key: _tokenKey, value: token);
   }
 
+  Future<void> saveProfileImageUrl(String url) async {
+    await _storage.write(key: 'profileImageUrl', value: url);
+  }
+
+  Future<String?> getProfileImageUrl() async {
+    return await _storage.read(key: 'profileImageUrl');
+  }
+
+  Future<void> deleteProfileImageUrl() async {
+    await _storage.delete(key: 'profileImageUrl');
+  }
+
 }

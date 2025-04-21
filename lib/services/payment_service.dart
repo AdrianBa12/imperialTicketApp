@@ -8,12 +8,13 @@ import '../providers/booking_provider.dart';
 
 class PaymentService {
   static const String _baseUrl = 'http://192.168.101.5:5000/api';
-  static const String _secretKey = "sk_test_51OqTwwJ5bCJjLaWJ2maitwEt6xrNDJefHFWiTMEvya4M4kSWPkXwkxR1H1zw8iCefeezKgkHeu9dm9n8ZgPEvexD00WEkNvagk";
+  static const String _secretKey =
+      "sk_test_51OqTwwJ5bCJjLaWJ2maitwEt6xrNDJefHFWiTMEvya4M4kSWPkXwkxR1H1zw8iCefeezKgkHeu9dm9n8ZgPEvexD00WEkNvagk";
   static String? _authToken;
 
-  // Inicialización
   static Future<void> initialize() async {
-    Stripe.publishableKey = 'pk_test_51OqTwwJ5bCJjLaWJRYviZMsKdA0ArSX6TH6NZ8TxaQiWey6TKzJdgXZrKtW9FqDBuLvx8PYVmLMoEdu9iNYEbXuf009soPlNub';
+    Stripe.publishableKey =
+        'pk_test_51OqTwwJ5bCJjLaWJRYviZMsKdA0ArSX6TH6NZ8TxaQiWey6TKzJdgXZrKtW9FqDBuLvx8PYVmLMoEdu9iNYEbXuf009soPlNub';
     await Stripe.instance.applySettings();
   }
 
@@ -26,7 +27,7 @@ class PaymentService {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final bookingProvider = Provider.of<BookingProvider>(context, listen: false);
 
-      if (authProvider.firebaseUser?.email == null) {
+      if (authProvider.userModel?.email == null) {
         throw Exception('User email is required');
       }
 
@@ -38,24 +39,19 @@ class PaymentService {
         amount: amount,
         currency: currency,
         bookingId: bookingProvider.bookingId!,
-        email: authProvider.firebaseUser!.email!,
-        name: authProvider.firebaseUser!.displayName ?? 'Customer',
+        email: authProvider.userModel!.email,
+        name: authProvider.userModel!.username ,
       );
 
       await _presentPaymentSheet(
         clientSecret: paymentIntent['clientSecret'],
         bookingId: bookingProvider.bookingId!,
       );
-      
-      final confirmation = await _confirmPayment(
-        paymentIntentId: paymentIntent['paymentIntentId'],
-        bookingId: bookingProvider.bookingId!,
-      );
+
 
       return {
         'status': 'succeeded',
         'paymentId': paymentIntent['paymentIntentId'],
-
       };
     } catch (e) {
       debugPrint('Payment error: $e');
@@ -78,28 +74,23 @@ class PaymentService {
     try {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
-
-      if (authProvider.firebaseUser == null) {
+      if (authProvider.userModel == null) {
         throw Exception("Debes iniciar sesión antes de realizar un pago");
       }
 
-      // 1. Crear PaymentIntent
       final paymentIntent = await _createPaymentIntent(
         amount: amount,
         currency: currency,
         bookingId: bookingId,
-        email: authProvider.firebaseUser!.email!,
-        name: authProvider.firebaseUser!.displayName ?? "Cliente",
+        email: authProvider.userModel!.email,
+        name: authProvider.userModel!.username ,
       );
 
-
-      // 2. Mostrar PaymentSheet
       await _presentPaymentSheet(
         clientSecret: paymentIntent['clientSecret'],
         bookingId: bookingId,
       );
 
-      // 3. Confirmar pago en backend
       await _confirmPayment(
         paymentIntentId: paymentIntent['paymentIntentId'],
         bookingId: bookingId,
@@ -110,7 +101,6 @@ class PaymentService {
     }
   }
 
-  // ------------------- Métodos Privados -------------------
   static Future<Map<String, dynamic>> _createPaymentIntent({
     required double amount,
     required String currency,
@@ -188,8 +178,8 @@ class PaymentService {
   }
 
   static Future<Map<String, dynamic>> getPaymentStatus(
-      String paymentIntentId,
-      ) async {
+    String paymentIntentId,
+  ) async {
     final response = await http.get(
       Uri.parse('$_baseUrl/payments/status/$paymentIntentId'),
       headers: _buildHeaders(),
@@ -197,7 +187,6 @@ class PaymentService {
     return _handleResponse(response);
   }
 
-  // ------------------- Helpers -------------------
   static Map<String, String> _buildHeaders() {
     return {
       'Content-Type': 'application/json',
@@ -227,7 +216,7 @@ class PaymentService {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: {
-          'amount': (amount * 100).toInt().toString(), // Stripe usa centavos
+          'amount': (amount * 100).toInt().toString(), 
           'currency': currency,
           'payment_method_types[]': 'card',
         },
@@ -254,7 +243,8 @@ class PaymentService {
     }
   }
 
-  Future<void> registerPayment(String bookingId, double amount, String status) async {
+  Future<void> registerPayment(
+      String bookingId, double amount, String status) async {
     final response = await http.post(
       Uri.parse('$_baseUrl/payments'),
       headers: {'Content-Type': 'application/json'},
@@ -269,7 +259,6 @@ class PaymentService {
       throw Exception("Error al registrar el pago en la base de datos");
     }
   }
-
 
   Future<bool> confirmPayment({
     required BuildContext context,
@@ -290,6 +279,7 @@ class PaymentService {
       return false;
     }
   }
+
   static Future<void> verifyPaymentSuccess(String paymentIntentId) async {
     final response = await http.get(
       Uri.parse('$_baseUrl/payments/verify/$paymentIntentId'),
@@ -301,6 +291,7 @@ class PaymentService {
       throw Exception('El pago no fue completado');
     }
   }
+
   static Future<Map<String, dynamic>> verifyPayment(String paymentIntentId) async {
     try {
       final response = await http.get(
@@ -313,8 +304,7 @@ class PaymentService {
       if (response.statusCode != 200) {
         throw Exception(data['error'] ?? 'Verification failed');
       }
-
-      return data['data']; // Retorna la estructura completa
+      return data['data']; 
     } catch (e) {
       debugPrint('Payment verification error: $e');
       rethrow;

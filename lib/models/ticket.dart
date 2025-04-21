@@ -43,7 +43,6 @@ class Ticket {
     this.bookingStatus = 'confirmed',
   });
 
-  /// Convertir desde JSON
   factory Ticket.fromJson(Map<String, dynamic> json) {
     return Ticket(
       id: json['_id'] ?? json['id'] ?? '',
@@ -68,7 +67,6 @@ class Ticket {
     );
   }
 
-  /// Convertir a JSON
   Map<String, dynamic> toJson() {
     return {
       'id': id,

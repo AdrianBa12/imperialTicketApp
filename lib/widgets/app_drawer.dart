@@ -27,7 +27,7 @@ class AppDrawer extends StatelessWidget {
                 const SizedBox(height: 16),
                 if (isAuthenticated)
                   Text(
-                    'Hola, ${user?.displayName ?? 'User'}',
+                    'Hola, ${user?.fullName ?? 'User'}',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
@@ -68,7 +68,6 @@ class AppDrawer extends StatelessWidget {
               title: const Text('Mis Reservas'),
               onTap: () {
                 Navigator.pop(context);
-                // Navigate to bookings screen
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Próximamente, la función de reservas estará disponible')),
                 );
@@ -82,7 +81,6 @@ class AppDrawer extends StatelessWidget {
               Navigator.pushNamed(context, '/my-bookings');
             },
           ),
-
 
           ListTile(
             leading: const Icon(Icons.person_outline),

@@ -4,34 +4,27 @@ import '../models/seat.dart';
 import '../models/ticket.dart';
 
 class BookingProvider with ChangeNotifier {
-  // User selection data
+
   String? _fromCity;
   String? _toCity;
   DateTime? _journeyDate;
   double _totalPrice = 0.0;
   double? _discount;
 
-
-  // Selected bus and route
   Bus? _selectedBus;
   String? _selectedRouteId;
 
-  // Selected seats
   String? _bookingId;
   List<Seat> _selectedSeats = [];
 
-  // Passenger details
   String? _passengerName;
   String? _passengerEmail;
   String? _passengerPhone;
 
-  // User ID for booking
   String? _userId;
 
-  // Final booking/ticket
   Ticket? _booking;
 
-  // Getters
   String? get bookingId => _bookingId;
   String? get fromCity => _fromCity;
   String? get toCity => _toCity;
@@ -48,7 +41,6 @@ class BookingProvider with ChangeNotifier {
 
   double get totalPrice => _totalPrice;
 
-  // Setters
   void setTotalPrice(double price) {
     _totalPrice = price;
     notifyListeners();
@@ -74,8 +66,6 @@ class BookingProvider with ChangeNotifier {
     notifyListeners();
   }
 
-
-
   void clearSeatSelection() {
     _selectedSeats.clear();
     _totalPrice = 0.0;
@@ -90,8 +80,6 @@ class BookingProvider with ChangeNotifier {
     _discount = amount;
     notifyListeners();
   }
-
-
 
   void setBookingId(String id) {
     _bookingId = id;
@@ -135,10 +123,8 @@ class BookingProvider with ChangeNotifier {
     final index = _selectedSeats.indexWhere((s) => s.id == seat.id);
 
     if (index >= 0) {
-      // Seat is already selected, remove it
       _selectedSeats.removeAt(index);
     } else {
-      // Seat is not selected, add it
       _selectedSeats.add(seat);
     }
 
@@ -171,7 +157,6 @@ class BookingProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // Clear all data
   void clearAll() {
     _fromCity = null;
     _toCity = null;
@@ -186,7 +171,6 @@ class BookingProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // Clear booking data but keep user preferences
   void clearBookingData() {
     _selectedBus = null;
     _selectedRouteId = null;

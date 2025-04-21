@@ -10,7 +10,7 @@ import '../models/seat.dart';
 import '../models/ticket.dart';
 
 class ApiService {
-  // Base URL for the API
+
   static const baseUrl = 'http://192.168.101.5:5000/api';
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -22,7 +22,7 @@ class ApiService {
     );
 
     final token = await _getJwtTokenFromBackend(userCredential.user!.uid);
-    await SecureStorage.storeToken(token); // Almacena el token localmente
+    await SecureStorage.storeToken(token); 
     return token;
   }
 
@@ -64,7 +64,6 @@ class ApiService {
 
   }
 
-  // Bus and Route APIs
   Future<List<BusRoute>> getRoutes() async {
     try {
       final response = await http.get(
@@ -122,7 +121,6 @@ class ApiService {
     }
   }
 
-  // Booking APIs
   Future<Map<String, dynamic>> createBooking(String authToken, Booking booking) async {
     try {
       final response = await http.post(
@@ -235,7 +233,6 @@ class ApiService {
     }
   }
 
-// Payment APIs
   Future<Map<String, dynamic>> createPaymentIntent(
       String authToken,
       double amount,
@@ -250,7 +247,7 @@ class ApiService {
           'Authorization': 'Bearer $authToken',
         },
         body: json.encode({
-          'amount': (amount * 100).toInt(), // Convert to cents/paisa
+          'amount': (amount * 100).toInt(), 
           'currency': currency,
           'bookingId': bookingId,
         }),
@@ -280,7 +277,6 @@ class ApiService {
     }
   }
 
-// WebSocket connection status check
   Future<bool> checkServerStatus() async {
     try {
       final response = await http.get(

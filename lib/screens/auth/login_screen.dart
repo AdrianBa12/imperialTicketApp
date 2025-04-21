@@ -9,8 +9,7 @@ class LoginScreen extends StatefulWidget {
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
-}
-
+} 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
@@ -32,9 +31,15 @@ class _LoginScreenState extends State<LoginScreen> {
         _passwordController.text,
       );
 
-      if (success && mounted) {
-        Navigator.pushReplacementNamed(context, '/search');
-      }
+      if (success) {
+      
+      Navigator.pushReplacementNamed(context, '/search');
+    } else {
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Login fallido. Verifica tus credenciales')),
+      );
+    }
     }
   }
 
@@ -56,7 +61,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 32),
 
-                // Error message
                 if (authProvider.error != null)
                   Container(
                     padding: const EdgeInsets.all(12),
@@ -92,13 +96,13 @@ class _LoginScreenState extends State<LoginScreen> {
                         prefixIcon: Icons.email_outlined,
                         keyboardType: TextInputType.emailAddress,
                         validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Por favor ingrese su correo electrónico';
-                          }
-                          if (!value.contains('@') || !value.contains('.')) {
-                            return 'Por favor, introduzca un correo electrónico válido';
-                          }
-                          return null;
+                        if (value == null || value.isEmpty) {
+                          return 'Por favor ingrese su correo electrónico';
+                        }
+                        if (!RegExp(r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+").hasMatch(value)) {
+                          return 'Por favor, introduzca un correo electrónico válido';
+                        }
+                        return null;
                         },
                       ),
                       const SizedBox(height: 16),
@@ -185,7 +189,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 32),
 
-                // Continue as guest
                 Center(
                   child: TextButton(
                     onPressed: () {

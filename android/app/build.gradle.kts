@@ -28,6 +28,9 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        renderscriptTargetApi = 21
+        renderscriptSupportModeEnabled = true
+
     }
 
     buildTypes {

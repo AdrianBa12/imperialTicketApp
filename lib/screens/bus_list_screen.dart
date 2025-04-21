@@ -14,8 +14,8 @@ class BusListScreen extends StatefulWidget {
 
 class _BusListScreenState extends State<BusListScreen> {
   bool _isLoading = true;
-  List<Map<String, dynamic>> _allBusData = []; // All fetched bus data
-  List<Map<String, dynamic>> _filteredBusData = []; // Filtered bus data to display
+  List<Map<String, dynamic>> _allBusData = []; 
+  List<Map<String, dynamic>> _filteredBusData = []; 
   String? _error;
   late DateTime _selectedDate;
   final List<DateTime> _availableDates = [];
@@ -26,7 +26,6 @@ class _BusListScreenState extends State<BusListScreen> {
     final provider = Provider.of<BookingProvider>(context, listen: false);
     _selectedDate = provider.journeyDate ?? DateTime.now();
 
-    // Generate a list of dates for the next 7 days
     final now = DateTime.now();
     for (int i = 0; i < 7; i++) {
       _availableDates.add(DateTime(now.year, now.month, now.day + i));
@@ -50,7 +49,6 @@ class _BusListScreenState extends State<BusListScreen> {
         throw Exception('Parámetros de búsqueda no establecidos');
       }
 
-      // Instanciar ApiService
       final apiService = ApiService();
 
       List<Map<String, dynamic>> allBusData = [];
@@ -88,11 +86,9 @@ class _BusListScreenState extends State<BusListScreen> {
     setState(() {
       _selectedDate = date;
 
-      // Update the provider's journey date
       final provider = Provider.of<BookingProvider>(context, listen: false);
       provider.setJourneyDate(date);
 
-      // Filter buses for the selected date
       _filteredBusData = _allBusData.where((busData) {
         final busDate = DateTime.parse(busData['date']);
         return busDate.year == date.year &&
@@ -111,10 +107,9 @@ class _BusListScreenState extends State<BusListScreen> {
       ),
       body: Column(
         children: [
-          // Date filter bar
+
           _buildDateFilterBar(),
 
-          // Route info bar
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             color: Colors.grey.shade100,
@@ -152,7 +147,6 @@ class _BusListScreenState extends State<BusListScreen> {
             ),
           ),
 
-          // Bus list
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -271,9 +265,7 @@ class _BusListScreenState extends State<BusListScreen> {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () {
-          // Set the selected bus with the route ID
           provider.setSelectedBus(bus, routeId);
-          // Also update the journey date to the selected date
           provider.setJourneyDate(_selectedDate);
           Navigator.pushNamed(context,'/seat_selected');
         },
@@ -282,7 +274,6 @@ class _BusListScreenState extends State<BusListScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Bus name and type
               Row(
                 children: [
                   Expanded(
@@ -335,7 +326,6 @@ class _BusListScreenState extends State<BusListScreen> {
 
               const SizedBox(height: 16),
 
-              // Time and duration
               Row(
                 children: [
                   Expanded(
@@ -410,7 +400,6 @@ class _BusListScreenState extends State<BusListScreen> {
 
               const SizedBox(height: 16),
 
-              // Amenities and price
               Row(
                 children: [
                   Expanded(

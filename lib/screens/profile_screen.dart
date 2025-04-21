@@ -16,57 +16,117 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameController;
   late TextEditingController _emailController;
-  late TextEditingController _phoneController;
+  late TextEditingController _fullnameController;
   bool _isEditing = false;
   bool _isLoading = false;
   File? _profileImage;
 
+  
   @override
   void initState() {
     super.initState();
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final user = authProvider.userModel;
 
-    _nameController = TextEditingController(text: user?.displayName ?? '');
+    _nameController = TextEditingController(text: user?.username ?? '');
     _emailController = TextEditingController(text: user?.email ?? '');
-    _phoneController = TextEditingController(text: user?.phoneNumber ?? '');
+    _fullnameController = TextEditingController(text: user?.fullName ?? '');
     _profileImage = user?.photoURL != null ? File(user!.photoURL!) : null;
+
+    _profileImage = null; 
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
-    _phoneController.dispose();
+    _fullnameController.dispose();
     super.dispose();
   }
 
-  Future<void> _updateProfile() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
-      });
+  ImageProvider? _getProfileImage() {
+  final authProvider = Provider.of<AuthProvider>(context, listen: false);
+  
+  if (_isEditing && _profileImage != null) {
+    return FileImage(_profileImage!);
+  }
+  
+  if (authProvider.profileImageUrl != null && authProvider.profileImageUrl!.isNotEmpty) {
+    return NetworkImage(authProvider.profileImageUrl!);
+  }
+  
+  if (authProvider.userModel?.photoURL != null) {
+    return NetworkImage(authProvider.userModel!.photoURL!);
+  }
+  
+  return null;
+  
+  
+}
 
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      final success = await authProvider.updateProfile(
-        displayName: _nameController.text.trim(),
-        phoneNumber: _phoneController.text.trim(),
-        profileImage: _profileImage,
+  Widget? _showProfileIcon() {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    if ((_isEditing && _profileImage == null) || 
+        (!_isEditing && (authProvider.profileImageUrl == null || authProvider.profileImageUrl!.isEmpty))) {
+      return const Icon(
+        Icons.person,
+        size: 50,
+        color: Colors.white,
       );
-      setState(() {
-        _isLoading = false;
-        if (success) {
-          _isEditing = false;
-        }
-      });
+    }
+    return null;
+  }
+
+  void _clearImageCache() {
+  if (_profileImage != null) {
+    final imageProvider = FileImage(_profileImage!);
+    imageProvider.evict().then<void>((bool success) {
+      if (success && mounted) {
+        setState(() {});
+      }
+    });
+  }
+}
+
+Future<void> _updateProfile() async {
+  if (_formKey.currentState!.validate()) {
+    try {
+      final user = Provider.of<AuthProvider>(context, listen: false).userModel;
+      final hasChanges = _fullnameController.text.trim() != user?.fullName || 
+                        _profileImage != null;
+
+      if (!hasChanges) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No hay cambios para guardar')),
+        );
+        return;
+      }
+
+      final success = await Provider.of<AuthProvider>(context, listen: false)
+        .updateProfile(
+          fullName: _fullnameController.text.trim(),
+          profileImage: _profileImage,
+        );
 
       if (success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Perfil actualizado exitosamente')),
+          const SnackBar(content: Text('Perfil actualizado correctamente')),
+        );
+        setState(() {
+          _isEditing = false;
+          _isLoading = false;
+          _profileImage = null; 
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: ${e.toString()}')),
         );
       }
     }
   }
+}
 
   Future<void> _signOut() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -78,13 +138,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _pickImage(ImageSource source) async {
-    final pickedFile = await ImagePicker().pickImage(source: source);
-    if (pickedFile != null) {
-      setState(() {
-        _profileImage = File(pickedFile.path);
-      });
+  try {
+    final pickedFile = await ImagePicker().pickImage(
+      source: source,
+      maxWidth: 800,
+      maxHeight: 800,
+      imageQuality: 85,
+    );
+    if (!mounted) return;
+
+    if (pickedFile != null ) {
+
+      final imageFile = File(pickedFile.path);
+      final fileExists = await imageFile.exists();
+      if (!mounted) {
+        return; 
+      }
+      
+      if (fileExists) {
+        setState(() {
+          _profileImage = imageFile;
+        });
+        _clearImageCache(); 
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo acceder a la imagen')),
+        );
+      }
+    }
+  } catch (e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.toString()}')),
+      );
     }
   }
+}
+
+ 
 
   void _showImagePicker(BuildContext context) {
     showModalBottomSheet(
@@ -185,6 +276,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildUserProfile(BuildContext context, dynamic user) {
+    // final authProvider = Provider.of<AuthProvider>(context);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -200,27 +292,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     }
                   },
                   child: CircleAvatar(
-                    radius: 50,
-                    backgroundColor: Colors.grey,
-                    backgroundImage: _profileImage != null ? FileImage(_profileImage!) : null,
-                    child: _profileImage == null
-                        ? const Icon(
-                      Icons.person,
-                      size: 50,
-                      color: Colors.white,
-                    )
-                        : null,
-                  ),
+                  radius: 50,
+                  backgroundColor: Colors.grey,
+                  backgroundImage: _getProfileImage(), 
+                  child: _showProfileIcon(),
+                ),
                 ),
                 const SizedBox(height: 16),
                 if (!_isEditing)
                   Text(
-                    user?.displayName ?? 'User',
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                    user?.fullName ?? user?.username ?? 'Usuario',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                )
               ],
             ),
           ),
@@ -232,7 +315,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               children: [
                 if (_isEditing)
                   CustomTextField(
-                    controller: _nameController,
+                    controller: _fullnameController,
                     label: 'Nombre completo',
                     prefixIcon: Icons.person_outline,
                     enabled: _isEditing,
@@ -244,35 +327,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     },
                   )
                 else
-                  _buildProfileItem('Nombre completo', user?.displayName ?? 'No establecido'),
-
+                  _buildProfileItem('Nombre completo', user?.fullName ?? user?.username ?? 'No establecido'),
                 const SizedBox(height: 16),
 
                 _buildProfileItem('Correo electrónico', user?.email ?? 'No establecido', isEditable: false),
 
                 const SizedBox(height: 16),
-
-                if (_isEditing)
-                  CustomTextField(
-                    controller: _phoneController,
-                    label: 'Número de teléfono',
-                    prefixIcon: Icons.phone_outlined,
-                    keyboardType: TextInputType.phone,
-                    enabled: _isEditing,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Por favor ingrese su número de teléfono';
-                      }
-                      if (value.length < 10) {
-                        return 'Por favor, introduzca un número de teléfono válido';
-                      }
-                      return null;
-                    },
-                  )
-                else
-                  _buildProfileItem('Número de teléfono', user?.phoneNumber ?? 'No establecido'),
-
-                if (_isEditing) const SizedBox(height: 32),
 
                 if (_isEditing)
                   Row(
@@ -282,9 +342,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           onPressed: () {
                             setState(() {
                               _isEditing = false;
-                              _nameController.text = user?.displayName ?? '';
-                              _phoneController.text = user?.phoneNumber ?? '';
-                              _profileImage = user?.photoUrl != null ? File(user!.photoUrl!) : null;
+                              _nameController.text = user?.username ?? '';
+                              _emailController.text = user?.email ?? '';
+                              _fullnameController.text = user?.fullName ?? '';
+                              _profileImage = user?.photoURL != null ? File(user!.photoURL!) : null;
+                               
                             });
                           },
                           child: const Text('CANCELAR'),

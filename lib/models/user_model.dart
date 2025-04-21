@@ -22,21 +22,19 @@ class UserModel {
         favoriteRoutes = favoriteRoutes ?? [],
         createdAt = createdAt ?? DateTime.now();
 
-  /// Factory para convertir JSON a modelo
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
       uid: json['uid'] ?? '',
       email: json['email'] ?? '',
       displayName: json['displayName'],
       phoneNumber: json['phoneNumber'],
-      photoURL: json['photoURL'], // Usar el nombre estándar de Firebase
+      photoURL: json['photoURL'], 
       recentSearches: (json['recentSearches'] as List?)?.map((e) => e.toString()).toList() ?? [],
       favoriteRoutes: (json['favoriteRoutes'] as List?)?.map((e) => e.toString()).toList() ?? [],
       createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']) : DateTime.now(),
     );
   }
 
-  /// Convierte el modelo a JSON
   Map<String, dynamic> toJson() {
     return {
       'uid': uid,
@@ -50,7 +48,6 @@ class UserModel {
     };
   }
 
-  /// Permite modificar copias del usuario sin afectar la instancia original
   UserModel copyWith({
     String? uid,
     String? email,

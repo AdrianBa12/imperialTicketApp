@@ -23,8 +23,6 @@ class _BookingScreenState extends State<BookingScreen> {
   @override
   void initState() {
     super.initState();
-
-    // Initialize controllers with existing values if available
     final provider = Provider.of<BookingProvider>(context, listen: false);
     if (provider.passengerName != null) {
       _nameController.text = provider.passengerName!;
@@ -50,14 +48,11 @@ class _BookingScreenState extends State<BookingScreen> {
     if (_formKey.currentState!.validate()) {
       final provider = Provider.of<BookingProvider>(context, listen: false);
 
-      // Save passenger details
       provider.setPassengerDetails(
         name: _nameController.text,
         email: _emailController.text,
         phone: _phoneController.text,
       );
-
-      // Navigate to payment screen
       Navigator.pushNamed(context, '/payment');
     }
   }
@@ -275,7 +270,6 @@ class _BookingScreenState extends State<BookingScreen> {
 
             const SizedBox(height: 24),
 
-            // Passenger details form
             Text(
               'Detalles de Pasajero',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -293,7 +287,7 @@ class _BookingScreenState extends State<BookingScreen> {
                   key: _formKey,
                   child: Column(
                     children: [
-                      // Name field
+
                       TextFormField(
                         controller: _nameController,
                         decoration: const InputDecoration(
@@ -310,7 +304,6 @@ class _BookingScreenState extends State<BookingScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Email field
                       TextFormField(
                         controller: _emailController,
                         decoration: const InputDecoration(
@@ -331,7 +324,6 @@ class _BookingScreenState extends State<BookingScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Phone field
                       TextFormField(
                         controller: _phoneController,
                         decoration: const InputDecoration(
@@ -352,7 +344,6 @@ class _BookingScreenState extends State<BookingScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Save info checkbox
                       CheckboxListTile(
                         title: const Text('Guardar la información de los pasajeros para futuras reservas'),
                         value: _savePassengerInfo,
@@ -380,7 +371,6 @@ class _BookingScreenState extends State<BookingScreen> {
             ),
             const SizedBox(height: 24),
 
-            // Continue button
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(

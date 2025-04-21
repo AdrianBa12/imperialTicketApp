@@ -3,11 +3,11 @@ class BusRoute {
   final String fromCity;
   final String toCity;
   final int distance;
-  final int duration; // in minutes
+  final int duration; 
   final double baseFare;
   final bool isPopular;
   final List<String> busIds;
-  final DateTime travelDate;// References to buses that serve this route
+  final DateTime travelDate;
 
   BusRoute({
     required this.id,
@@ -36,7 +36,7 @@ class BusRoute {
           : [],
       travelDate: json['travelDate'] != null
           ? DateTime.parse(json['travelDate'])
-          : DateTime.now(), // Parse the travelDate field if it exists, or set it to current date
+          : DateTime.now(), 
     );
   }
 
@@ -50,7 +50,7 @@ class BusRoute {
       'baseFare': baseFare,
       'isPopular': isPopular,
       'busIds': busIds,
-      'travelDate': travelDate.toIso8601String(), // Convert DateTime to ISO 8601 string
+      'travelDate': travelDate.toIso8601String(), 
     };
   }
 }

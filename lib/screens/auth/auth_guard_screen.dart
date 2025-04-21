@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+
 class AuthGuard extends StatelessWidget {
   final Widget child;
 
@@ -10,13 +11,15 @@ class AuthGuard extends StatelessWidget {
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
 
-    if (!auth.isAuthenticated || !auth.hasValidToken) {
+    if (!auth.isAuthenticated) {
       Future.microtask(() {
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          '/login',
-              (route) => false,
-        );
+        if (context.mounted) {
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            '/login',
+            (route) => false,
+          );
+        }
       });
       return Scaffold(body: Center(child: CircularProgressIndicator()));
     }

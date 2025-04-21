@@ -1,175 +1,128 @@
 import 'dart:convert';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:imperialticketapp/services/secure_service.dart';
-import '../models/user_model.dart';
+import '../models/strapi_user_model.dart';
 
 class AuthService {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final SecureStorage _secureStorage = SecureStorage();
+  String? _authToken;
+  static const String baseUrl = 'https://automatic-festival-37ec7cc8d8.strapiapp.com';
 
-
-  Stream<User?> get authStateChanges => _auth.authStateChanges();
-
-
-  User? get currentUser => _auth.currentUser;
-
-
-  Future<String> signInWithEmailAndPassword(String email, String password) async {
-    final userCredential = await _auth.signInWithEmailAndPassword(
-      email: email,
-      password: password,
-    );
-
-
-    final token = await _getJwtTokenFromBackend(userCredential.user!.uid);
-    await SecureStorage.storeToken(token);
-    return token;
-  }
-
-  Future<String?> getFirebaseToken() async {
-    User? user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      return await user.getIdToken();
-    }
-    return null;
-  }
-  Future<void> fetchProtectedData() async {
-    String? token = await getFirebaseToken();
-    if (token == null) {
-      print("No se pudo obtener el token de Firebase");
-      return;
-    }
-
-    var response = await http.get(
-      Uri.parse("http://192.168.101.5:5000/api/protected-route"),
+  Future<StrapiUserModel> getUserData() async {
+    _authToken = await _secureStorage.getToken();
+    final response = await http.get(
+      Uri.parse('https://automatic-festival-37ec7cc8d8.strapiapp.com/api/users/me?populate=*'),
       headers: {
-        "Authorization": "Bearer $token",  // Enviamos el token en el header
+        'Authorization': 'Bearer $_authToken',
       },
     );
 
     if (response.statusCode == 200) {
-      print("Datos recibidos: ${response.body}");
+      final jsonData = json.decode(response.body);
+      return StrapiUserModel.fromJson(jsonData);
     } else {
-      print("Error: ${response.body}");
+      throw Exception('Error al obtener los datos del usuario: ${response.body}');
     }
   }
 
-
-  Future<String> _getJwtTokenFromBackend(String uid) async {
-    final response = await http.post(
-      Uri.parse('http://192.168.101.5:5000/api/generate-token'),
-      headers: {'Content-Type': 'application/json'},
-      body: json.encode({'uid': uid}),
-    ).timeout(Duration(seconds: 10), onTimeout: () {
-      throw Exception('Tiempo de espera agotado al conectar con el servidor.');
-    });
-
-    if (response.statusCode == 200) {
-      return json.decode(response.body)['token'];
-    } else {
-      throw Exception('Error al obtener el token JWT');
-    }
-  }
-
-
-  Future<UserCredential?> registerWithEmailAndPassword(
-      String email, String password, String displayName, String? phoneNumber) async {
-    try {
-      final userCredential = await _auth.createUserWithEmailAndPassword(email: email, password: password);
-
-      final user = userCredential.user;
-      if (user == null) throw Exception("Error al crear usuario.");
-
-      await user.updateDisplayName(displayName);
-      await user.sendEmailVerification();
-
-      await _createUserDocument(user, displayName, phoneNumber);
-
-      return userCredential;
-    } on FirebaseAuthException catch (e) {
-      throw Exception(_handleAuthError(e));
-    }
-  }
-
-  Future<void> _createUserDocument(User user, String displayName, String? phoneNumber) async {
-    final userModel = UserModel(
-      uid: user.uid,
-      email: user.email!,
-      displayName: displayName,
-      phoneNumber: phoneNumber,
-      recentSearches: [],
-      favoriteRoutes: [],
+  Future<void> updateUserProfile({String? fullName, String? photoURL}) async {
+    _authToken = await _secureStorage.getToken();
+    final response = await http.put(
+      Uri.parse('https://automatic-festival-37ec7cc8d8.strapiapp.com/api/users/me'),
+      headers: {
+        'Authorization': 'Bearer $_authToken',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'fullName': fullName, 
+        'photoURL': photoURL,
+      }),
     );
 
-    await _firestore.collection('users').doc(user.uid).set(userModel.toJson());
-  }
-
-  Future<UserModel?> getUserData() async {
-    if (currentUser == null) return null;
-    try {
-      final doc = await _firestore.collection('users').doc(currentUser!.uid).get();
-      if (!doc.exists) return null;
-      return UserModel.fromJson(doc.data()!);
-    } catch (e) {
-      debugPrint('Error obteniendo datos de usuario: $e');
-      return null;
+    if (response.statusCode != 200) {
+      throw Exception('Error al actualizar el perfil: ${response.body}');
     }
   }
 
-  Future<void> updateUserProfile({String? displayName, String? phoneNumber, String? photoURL}) async {
-    if (currentUser == null) return;
-
+  Future<StrapiUserModel> registerWithEmailAndPassword({
+    required String email,
+    required String password,
+    required String username,
+    required String fullName,
+  }) async {
     try {
-      final updates = <String, dynamic>{};
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/auth/register'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: json.encode({
+          'username': username,
+          'email': email,
+          'password': password,
+          'fullName': fullName,
+        }),
+      );
 
-      if (displayName != null) {
-        await currentUser!.updateDisplayName(displayName);
-        updates['displayName'] = displayName;
+      if (response.statusCode == 200) {
+        final responseData = json.decode(response.body);
+        return StrapiUserModel.fromJson({
+          ...responseData['user'],
+          'documentId': responseData['user']['id'].toString(),
+          'publishedAt': responseData['user']['createdAt'], // Usar createdAt si publishedAt no existe
+          'reservas': [],
+          'photoURL': null, // Valor por defecto
+        });
+      } else {
+        final errorData = json.decode(response.body);
+        throw Exception(errorData['error']['message'] ?? 'Error en el registro');
       }
-
-      if (phoneNumber != null) updates['phoneNumber'] = phoneNumber;
-      if (photoURL != null) {
-        await currentUser!.updatePhotoURL(photoURL);
-        updates['photoURL'] = photoURL;
-      }
-
-      if (updates.isNotEmpty) {
-        await _firestore.collection('users').doc(currentUser!.uid).update(updates);
-      }
-
-      await _auth.currentUser?.reload();
     } catch (e) {
-      debugPrint('Error actualizando perfil: $e');
-      rethrow;
+      throw Exception('Error al registrar: ${e.toString()}');
+    }
+  }
+
+  Future<void> signInWithEmailAndPassword(String email, String password) async {
+    final response = await http.post(
+      Uri.parse('https://automatic-festival-37ec7cc8d8.strapiapp.com/api/auth/local'),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'identifier': email, 
+        'password': password,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      final jsonData = json.decode(response.body);
+      _authToken = jsonData['jwt'];
+      await _secureStorage.saveToken(_authToken!);
+    } else {
+      throw Exception('Error al iniciar sesión: ${response.body}');
     }
   }
 
   Future<void> signOut() async {
-    await _auth.signOut();
-  }
-  Future<void> sendPasswordResetEmail(String email) async {
-    await _auth.sendPasswordResetEmail(email: email);
+    await _secureStorage.deleteToken();
   }
 
-  String _handleAuthError(FirebaseAuthException e) {
-    switch (e.code) {
-      case 'invalid-email':
-        return 'El correo electrónico no es válido.';
-      case 'user-disabled':
-        return 'Este usuario ha sido deshabilitado.';
-      case 'user-not-found':
-        return 'No se encontró ninguna cuenta con este correo.';
-      case 'wrong-password':
-        return 'Contraseña incorrecta.';
-      case 'email-already-in-use':
-        return 'Este correo ya está registrado.';
-      case 'weak-password':
-        return 'La contraseña es demasiado débil.';
-      default:
-        return 'Error desconocido. Intenta nuevamente.';
+  Future<void> sendPasswordResetEmail(String email) async {
+    final response = await http.post(
+      Uri.parse('https://automatic-festival-37ec7cc8d8.strapiapp.com/api/auth/forgot-password'),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'email': email,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Error al enviar el correo de restablecimiento: ${response.body}');
     }
   }
+
+  signIn(String email, String password) {}
 }

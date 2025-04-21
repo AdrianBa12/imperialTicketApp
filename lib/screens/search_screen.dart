@@ -207,7 +207,7 @@ class _SearchScreenState extends State<SearchScreen> {
                         ),
                       ),
 
-                      // To city
+
                       GestureDetector(
                         onTap: () async {
                           final selectedCity = await showModalBottomSheet<String>(

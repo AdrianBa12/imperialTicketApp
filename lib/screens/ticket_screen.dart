@@ -31,7 +31,6 @@ class TicketScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.share),
             onPressed: () {
-              // Share ticket functionality
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Compartiendo boleto...'),
@@ -43,7 +42,7 @@ class TicketScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.download),
             onPressed: () {
-              // Download ticket functionality
+
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Descargando boleto...'),
@@ -58,7 +57,6 @@ class TicketScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // Success message
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16),
@@ -96,7 +94,6 @@ class TicketScreen extends StatelessWidget {
 
             const SizedBox(height: 24),
 
-            // Ticket card
             Card(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
@@ -104,7 +101,7 @@ class TicketScreen extends StatelessWidget {
               elevation: 4,
               child: Column(
                 children: [
-                  // Ticket header
+
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -161,7 +158,6 @@ class TicketScreen extends StatelessWidget {
                     ),
                   ),
 
-                  // Bus details
                   Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -213,7 +209,6 @@ class TicketScreen extends StatelessWidget {
 
                         const SizedBox(height: 16),
 
-                        // Journey details
                         Row(
                           children: [
                             Expanded(
@@ -277,7 +272,6 @@ class TicketScreen extends StatelessWidget {
 
                         const SizedBox(height: 16),
 
-                        // Divider with scissors icon
                         Row(
                           children: [
                             const Expanded(
@@ -312,7 +306,6 @@ class TicketScreen extends StatelessWidget {
 
                         const SizedBox(height: 16),
 
-                        // Passenger details
                         Row(
                           children: [
                             Expanded(
@@ -360,7 +353,6 @@ class TicketScreen extends StatelessWidget {
 
                         const SizedBox(height: 16),
 
-                        // Contact details
                         Row(
                           children: [
                             Expanded(
@@ -408,7 +400,6 @@ class TicketScreen extends StatelessWidget {
 
                         const SizedBox(height: 16),
 
-                        // Payment details
                         Row(
                           children: [
                             Expanded(
@@ -456,7 +447,6 @@ class TicketScreen extends StatelessWidget {
 
                         const SizedBox(height: 24),
 
-                        // QR code
                         Center(
                           child: QrImageView(
                             data: 'BOLETO:${ticket.id}',
@@ -484,13 +474,12 @@ class TicketScreen extends StatelessWidget {
 
             const SizedBox(height: 24),
 
-            // Action buttons
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () {
-                      // Cancel booking functionality
+
                       showDialog(
                         context: context,
                         builder: (context) => AlertDialog(
@@ -525,7 +514,7 @@ class TicketScreen extends StatelessWidget {
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () {
-                      // Navigate to home screen
+
                       provider.clearAll();
                       Navigator.pushNamedAndRemoveUntil(
                         context,
