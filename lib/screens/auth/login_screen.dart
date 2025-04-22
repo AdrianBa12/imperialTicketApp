@@ -195,7 +195,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       Navigator.pushReplacementNamed(context, '/search');
                     },
                     child: const Text(
-                      'Continuar como invitada',
+                      'Continuar como invitado',
                       style: TextStyle(
                         color: Colors.grey,
                         decoration: TextDecoration.underline,

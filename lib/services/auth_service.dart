@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:imperialticketapp/models/user.dart';
 import 'package:imperialticketapp/services/secure_service.dart';
 import '../models/strapi_user_model.dart';
 
@@ -22,6 +24,23 @@ class AuthService {
       return StrapiUserModel.fromJson(jsonData);
     } else {
       throw Exception('Error al obtener los datos del usuario: ${response.body}');
+    }
+  }
+
+   Future<User?> login(String identifier, String password) async {
+    final response = await http.post(
+      Uri.parse('https://automatic-festival-37ec7cc8d8.strapiapp.com/api/auth/local'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'identifier': identifier, 'password': password}),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      final userJson = data['user'];
+      return User.fromJson(userJson);
+    } else {
+      debugPrint('Error de inicio de sesión: ${response.statusCode}');
+      return null;
     }
   }
 
@@ -70,9 +89,9 @@ class AuthService {
         return StrapiUserModel.fromJson({
           ...responseData['user'],
           'documentId': responseData['user']['id'].toString(),
-          'publishedAt': responseData['user']['createdAt'], // Usar createdAt si publishedAt no existe
+          'publishedAt': responseData['user']['createdAt'], 
           'reservas': [],
-          'photoURL': null, // Valor por defecto
+          'photoURL': null, 
         });
       } else {
         final errorData = json.decode(response.body);

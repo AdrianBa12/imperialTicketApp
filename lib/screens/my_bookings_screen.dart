@@ -189,15 +189,15 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> with SingleTickerPr
 
     double refundPercentage;
     if (difference > 72) {
-      refundPercentage = 90; // More than 3 days: 90% refund
+      refundPercentage = 90; 
     } else if (difference > 48) {
-      refundPercentage = 75; // 2-3 days: 75% refund
+      refundPercentage = 75; 
     } else if (difference > 24) {
-      refundPercentage = 50; // 1-2 days: 50% refund
+      refundPercentage = 50; 
     } else if (difference > 12) {
-      refundPercentage = 25; // 12-24 hours: 25% refund
+      refundPercentage = 25; 
     } else {
-      refundPercentage = 0; // Less than 12 hours: No refund
+      refundPercentage = 0; 
     }
 
     final refundAmount = ticket.totalWithTax * (refundPercentage / 100);

@@ -12,4 +12,12 @@ class Pasajero {
     this.nombreCompleto = '',
     this.edad,
   });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'nombre': nombreCompleto,
+      'asiento': seatNo,
+      'documento': '${tipoDocumento.toUpperCase()} $numeroDocumento',
+    };
+  }
 }

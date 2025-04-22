@@ -1,11 +1,18 @@
 import 'dart:convert';
+import 'dart:io';
+import 'dart:math';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:path_provider/path_provider.dart';
+import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
+import 'package:imperialticketapp/models/user.dart';
+import 'package:imperialticketapp/screens/reserva_confirm_screen.dart';
 import 'package:open_file/open_file.dart';
+import 'package:path_provider/path_provider.dart';
+
 import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -19,31 +26,34 @@ class BookingScreen extends StatefulWidget {
   final String scheduleId;
   
   const BookingScreen({super.key, required this.scheduleId});
-
   @override
   State<BookingScreen> createState() => _BookingScreenState();
 
 }
 
 class _BookingScreenState extends State<BookingScreen> {
+  
+  static const String _apiPeruToken = '25222079ce57429371cf6d908d8b283966aad65f8e64caf50c2fff09a5727ce6';
+  static const String _apiPeruUrl = 'https://apiperu.dev/api/dni/';
   final MasterService _masterService = MasterService();
-  final _formKey = GlobalKey<FormState>();
   
   List<Asiento> _seatMap = [];
-  List<Pasajero> _userSelectedSeatArray = [];
+  final List<Pasajero> _userSelectedSeatArray = [];
+  final List<TextEditingController> _nombreControllers = [];
   bool _buscandoDNI = false;
   bool _mostrarResumen = false;
   bool _mostrarFormaPago = false;
   bool _procesandoPago = false;
   bool _isLoading = true;
+  User? _user;
   
   Map<String, dynamic> _scheduleData = {};
   Map<String, dynamic> _busInfo = {
     'claseDeBus': '',
     'placaBus': '',
   };
+  final bool _pagoExitoso = true;
   
-  // Datos de tarjeta
   String _numeroTarjeta = '';
   String _nombreTarjeta = '';
   String _expiracionTarjeta = '';
@@ -52,7 +62,83 @@ class _BookingScreenState extends State<BookingScreen> {
   @override
   void initState() {
     super.initState();
-    _getScheduleDetailsById();
+    _getScheduleDetailsById().then((_) {
+      _userSelectedSeatArray.addAll(
+        _seatMap.where((asiento) => asiento.estado == 'selected').map((asiento) => Pasajero(seatNo: asiento.number)).toList(),
+      );
+      _nombreControllers.clear();
+      _nombreControllers.addAll(
+      _userSelectedSeatArray.map((pasajero) => TextEditingController(text: pasajero.nombreCompleto)).toList(),
+    );
+  });
+  }
+
+   Future<void> _completarReserva() async {
+    final reservaData = {
+  'horario_de_autobus': _scheduleData['id'],
+  'numeroDeasiento': _userSelectedSeatArray.map((p) => p.seatNo).toList(),
+  'usuario': _user?.id,
+  'nombreCompleto': _userSelectedSeatArray.isNotEmpty ? _userSelectedSeatArray[0].nombreCompleto : '', 
+  'numeroDocumento': _userSelectedSeatArray.isNotEmpty ? _userSelectedSeatArray[0].numeroDocumento : '', 
+  'tipoDocumento': _userSelectedSeatArray.isNotEmpty ? _userSelectedSeatArray[0].tipoDocumento.toUpperCase() : '', 
+  'pasajeros': _userSelectedSeatArray.map((p) => { 
+    'nombreCompleto': p.nombreCompleto,
+    'numeroDocumento': p.numeroDocumento,
+    'tipoDocumento': p.tipoDocumento.toUpperCase(),
+  }).toList(),
+  'totalPagado': (_scheduleData['precio'] * _userSelectedSeatArray.length),
+  'codigoReserva': _generarCodigoReservaUnico(),
+};
+
+
+  final apiUrl = 'https://automatic-festival-37ec7cc8d8.strapiapp.com/api/reservas';
+  final headers = {'Content-Type': 'application/json'};
+  final body = jsonEncode({
+    'data': reservaData,
+  });
+
+  debugPrint('Cuerpo de la petición a Strapi: $body');
+
+  try {
+    final response = await http.post(Uri.parse(apiUrl), headers: headers, body: body);
+
+    debugPrint('Estado de la respuesta de Strapi: ${response.statusCode}');
+    debugPrint('Cuerpo de la respuesta de Strapi: ${response.body}');
+
+    if (response.statusCode == 201) {
+  debugPrint('Reserva guardada exitosamente en Strapi.');
+  
+  final reservaDetails = {
+    'codigo_reserva': reservaData['codigoReserva'],
+    'pasajeros': _userSelectedSeatArray.map((p) => {...p.toJson()}).toList(), 
+    'origen': _scheduleData['terminalSalidaId']['nombreTerminal'],
+    'destino': _scheduleData['terminalLlegadaId']['nombreTerminal'],
+    'fecha_salida': _scheduleData['fechaDeSalida'],
+    'bus': _busInfo['placaBus'],
+    'total_pagado': (_scheduleData['precio'] * _userSelectedSeatArray.length).toStringAsFixed(2),
+    'usuario': _user?.id, 
+    
+  };
+  final qrDataString = jsonEncode({'codigo_reserva': reservaData['codigoReserva']});
+
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => ReservaConfirmadaScreen(qrData: qrDataString, reservaDetails: reservaDetails),
+    ),
+  );
+    } else {
+      debugPrint('Error al guardar la reserva en Strapi. Status Code: ${response.statusCode}, Body: ${response.body}');
+     
+    }
+  } catch (e) {
+    debugPrint('Error de conexión al backend: $e');
+    
+  }
+}
+
+  String _generarCodigoReservaUnico() {
+    return DateTime.now().millisecondsSinceEpoch.toRadixString(36).toUpperCase();
   }
 
   Future<void> _getScheduleDetailsById() async {
@@ -79,36 +165,90 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   Future<void> _buscarDNI(int index) async {
-    final dni = _userSelectedSeatArray[index].numeroDocumento;
-
-    if (dni.isEmpty || dni.length != 8) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ingrese un DNI válido (8 dígitos)')),
-      );
-      return;
-    }
-
-    setState(() => _buscandoDNI = true);
-
-    try {
-      final response = await _masterService.buscarPorDNI(dni);
-      if (response['success'] && response['data'] != null) {
-        setState(() {
-          _userSelectedSeatArray[index].nombreCompleto = response['data']['nombre_completo'];
-        });
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(response['message'] ?? 'No se encontraron datos')),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al consultar DNI: $e')),
-      );
-    } finally {
-      setState(() => _buscandoDNI = false);
-    }
+  final numeroDNI = _userSelectedSeatArray[index].numeroDocumento;
+  
+  if (numeroDNI.length != 8) {
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('El DNI debe tener 8 dígitos.')),
+    );
+    return;
   }
+
+  setState(() {
+    _buscandoDNI = true;
+    
+  });
+
+  try {
+    final url = Uri.parse('$_apiPeruUrl$numeroDNI');
+    final headers = {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $_apiPeruToken',
+    };
+
+    final response = await http.get(url, headers: headers);
+    
+
+    if (response.statusCode == 200) {
+      try {
+        final decodedData = json.decode(response.body);
+         
+
+        if (decodedData['success'] == true && decodedData['data'] != null) {
+          final nombres = decodedData['data']['nombres'];
+          final apellidoPaterno = decodedData['data']['apellido_paterno'];
+          final apellidoMaterno = decodedData['data']['apellido_materno'];
+          final nombreCompleto = '$nombres $apellidoPaterno $apellidoMaterno';
+         
+
+          setState(() {
+            _userSelectedSeatArray[index].nombreCompleto = nombreCompleto;
+            _nombreControllers[index].text = nombreCompleto;
+            
+          });
+        } else {
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('DNI no encontrado.')),
+          );
+          setState(() {
+            _buscandoDNI = false;
+            
+          });
+        }
+      } catch (e) {
+         
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error al procesar la respuesta.')),
+        );
+        setState(() {
+          _buscandoDNI = false;
+           
+        });
+      }
+    } else {
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al buscar DNI: ${response.statusCode}')),
+      );
+      setState(() {
+        _buscandoDNI = false;
+        
+      });
+    }
+  } catch (e) {
+    debugPrint('Error de conexión: $e'); 
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Error de conexión: $e')),
+    );
+    setState(() {
+      _buscandoDNI = false;
+      
+    });
+  }
+  
+}
 
   String _checkSeatStatus(int seatNo) {
     final seat = _seatMap.firstWhere((s) => s.number == seatNo);
@@ -135,6 +275,7 @@ class _BookingScreenState extends State<BookingScreen> {
       
       if (existingIndex == -1) {
         _userSelectedSeatArray.add(Pasajero(seatNo: seatNo));
+        _nombreControllers.add(TextEditingController());
       } else {
         _userSelectedSeatArray.removeAt(existingIndex);
       }
@@ -152,7 +293,10 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   void _removePassenger(int index) {
-    setState(() => _userSelectedSeatArray.removeAt(index));
+    setState(() {
+    _userSelectedSeatArray.removeAt(index);
+    _nombreControllers.removeAt(index); 
+  });
   }
 
   void _bookNow() {
@@ -184,80 +328,104 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   Future<void> _confirmarPago() async {
-    if (_numeroTarjeta.isEmpty || _nombreTarjeta.isEmpty || 
-        _expiracionTarjeta.isEmpty || _cvv.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Complete todos los datos de la tarjeta')),
-      );
-      return;
-    }
+  setState(() {
+    _procesandoPago = true;
+  });
 
-    setState(() => _procesandoPago = true);
+  
+  await Future.delayed(const Duration(seconds: 3));
+  bool pagoExitoso = true; 
 
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final userData = prefs.getString('userData');
-      
-      if (userData == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Inicie sesión para reservar')),
-        );
-        return;
-      }
+  setState(() {
+    _procesandoPago = false;
+  });
 
-      final userId = jsonDecode(userData)['userId'];
-
-      // Crear reservas
-      final reservas = _userSelectedSeatArray.map((pasajero) => Reserva(
-        numeroDeasiento: pasajero.seatNo,
-        nombreCompleto: pasajero.nombreCompleto,
-        numeroDocumento: pasajero.numeroDocumento,
-        tipoDocumento: pasajero.tipoDocumento,
-        horarioDeAutobus: widget.scheduleId,
-        usuario: userId.toString(),
-      )).toList();
-
-      for (final reserva in reservas) {
-        await _masterService.crearReserva(reserva.toJson());
-      }
-
-      // Actualizar mapa de asientos
-      final nuevoMapa = _seatMap.map((asiento) => Asiento(
-        number: asiento.number,
-        estado: _userSelectedSeatArray.any((item) => item.seatNo == asiento.number) 
-            ? 'ocupado' 
-            : asiento.estado,
-      )).toList();
-
-      await _masterService.actualizarMapaAsientos(
-        widget.scheduleId,
-        nuevoMapa.map((e) => e.toJson()).toList(),
-      );
-
-      // Generar comprobante
-      _generarComprobante();
-
-      // Resetear estado
-      setState(() {
-        _mostrarResumen = false;
-        _mostrarFormaPago = false;
-        _procesandoPago = false;
-        _userSelectedSeatArray.clear();
-      });
-
-      await _getScheduleDetailsById();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Reserva completada con éxito')),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al procesar pago: $e')),
-      );
-    } finally {
-      setState(() => _procesandoPago = false);
-    }
+  if (pagoExitoso) {
+    
+    await _completarReserva();
+  } else {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('El pago falló. Inténtelo de nuevo.')),
+    );
   }
+}
+
+  // String generarCodigoReservaUnico() {
+  //   return DateTime.now().millisecondsSinceEpoch.toRadixString(36).toUpperCase();
+  // }
+
+
+  // Future<void> _confirmarPago() async {
+  //   if (_numeroTarjeta.isEmpty || _nombreTarjeta.isEmpty || 
+  //       _expiracionTarjeta.isEmpty || _cvv.isEmpty) {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       const SnackBar(content: Text('Complete todos los datos de la tarjeta')),
+  //     );
+  //     return;
+  //   }
+
+  //   setState(() => _procesandoPago = true);
+
+  //   try {
+  //     final prefs = await SharedPreferences.getInstance();
+  //     final userData = prefs.getString('userData');
+      
+  //     if (userData == null) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         const SnackBar(content: Text('Inicie sesión para reservar')),
+  //       );
+  //       return;
+  //     }
+
+  //     final userId = jsonDecode(userData)['userId'];
+
+  //     final reservas = _userSelectedSeatArray.map((pasajero) => Reserva(
+  //       numeroDeasiento: pasajero.seatNo,
+  //       nombreCompleto: pasajero.nombreCompleto,
+  //       numeroDocumento: pasajero.numeroDocumento,
+  //       tipoDocumento: pasajero.tipoDocumento,
+  //       horarioDeAutobus: widget.scheduleId,
+  //       usuario: userId.toString(),
+  //     )).toList();
+
+  //     for (final reserva in reservas) {
+  //       await _masterService.crearReserva(reserva.toJson());
+  //     }
+
+  //     final nuevoMapa = _seatMap.map((asiento) => Asiento(
+  //       number: asiento.number,
+  //       estado: _userSelectedSeatArray.any((item) => item.seatNo == asiento.number) 
+  //           ? 'ocupado' 
+  //           : asiento.estado,
+  //     )).toList();
+
+  //     await _masterService.actualizarMapaAsientos(
+  //       widget.scheduleId,
+  //       nuevoMapa.map((e) => e.toJson()).toList(),
+  //     );
+
+  //     _generarComprobante();
+
+  //     setState(() {
+  //       _mostrarResumen = false;
+  //       _mostrarFormaPago = false;
+  //       _procesandoPago = false;
+  //       _userSelectedSeatArray.clear();
+  //     });
+
+  //     await _getScheduleDetailsById();
+
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       const SnackBar(content: Text('Reserva completada con éxito')),
+  //     );
+  //   } catch (e) {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(content: Text('Error al procesar pago: $e')),
+  //     );
+  //   } finally {
+  //     setState(() => _procesandoPago = false);
+  //   }
+  // }
 
   Future<void> _generarComprobante() async {
   final fecha = DateFormat('dd MMMM yyyy', 'es').format(DateTime.now());
@@ -266,10 +434,8 @@ class _BookingScreenState extends State<BookingScreen> {
     );
 
     if (kIsWeb) {
-    // Solución para web - Mostrar el comprobante en un diálogo
     _mostrarComprobanteDialog();
-    } else {
-    // Solución para móvil - Generar PDF
+    } else { 
     await _generarPDF();
     }
   
@@ -294,7 +460,7 @@ class _BookingScreenState extends State<BookingScreen> {
             Text('Pasajeros:', style: TextStyle(fontWeight: FontWeight.bold)),
             ..._userSelectedSeatArray.map((p) => 
               Text('Asiento ${p.seatNo}: ${p.nombreCompleto} (${p.tipoDocumento} ${p.numeroDocumento})')
-            ).toList(),
+            ),
             SizedBox(height: 20),
             Text('Total: S/. ${(_scheduleData['precio'] * _userSelectedSeatArray.length).toStringAsFixed(2)}', 
                  style: TextStyle(fontWeight: FontWeight.bold)),
@@ -346,18 +512,17 @@ Future<void> _generarPDF() async {
     ),
   );
 
-  // Opción 1: Mostrar el PDF directamente
+  
   await Printing.layoutPdf(
     onLayout: (PdfPageFormat format) async => pdf.save(),
   );
 
-  // Opción 2: Guardar el PDF y abrirlo
-  /*
+  
   final directory = await getApplicationDocumentsDirectory();
   final file = File('${directory.path}/comprobante_reserva.pdf');
   await file.writeAsBytes(await pdf.save());
   await OpenFile.open(file.path);
-  */
+  
 }
   
 
@@ -395,13 +560,13 @@ Future<void> _generarPDF() async {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (!_mostrarResumen && !_mostrarFormaPago) ...[
-              _buildBusInfo(),
+              _buildBusInfo(_scheduleData, _busInfo),
               const SizedBox(height: 20),
               _buildSeatMap(),
               const SizedBox(height: 20),
               if (_userSelectedSeatArray.isNotEmpty) _buildPassengerForms(),
             ],
-            if (_mostrarResumen) _buildResumen(),
+            if (_mostrarResumen) _buildResumen(_scheduleData, _userSelectedSeatArray),
             if (_mostrarFormaPago) _buildPaymentForm(),
           ],
         ),
@@ -410,320 +575,571 @@ Future<void> _generarPDF() async {
     );
   }
 
-  Widget _buildBusInfo() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${_scheduleData['terminalSalidaId']['nombreTerminal']} → ${_scheduleData['terminalLlegadaId']['nombreTerminal']}',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-  'Salida: ${DateFormat('EEEE dd MMMM yyyy - HH:mm', 'es').format(DateTime.parse(_scheduleData['fechaDeSalida']))}',
-),
-            Text('Duración: ${_scheduleData['duracionEnHoras']} horas'),
-            Text('Bus: ${_busInfo['claseDeBus']} (${_busInfo['placaBus']})'),
-            Text('Precio: S/. ${_scheduleData['precio'].toStringAsFixed(2)}'),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildSeatMap() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Seleccione sus asientos',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 4,
-            crossAxisSpacing: 8,
-            mainAxisSpacing: 8,
-            childAspectRatio: 1,
+  const int seatsPerRowFirstFloor = 4;
+  const int firstFloorSeats = 12;
+  final int totalSeats = 48; 
+  final int secondFloorSeatsCount = totalSeats - firstFloorSeats;
+  const int seatsPerRowSecondFloor = 4;
+
+  Widget buildSeat(int seatNo) {
+    final status = _checkSeatStatus(seatNo);
+    Color color;
+    bool isSelectable = true;
+    switch (status) {
+      case 'libre':
+        color = Colors.green;
+        break;
+      case 'ocupado':
+        color = const Color(0xFFBF303C);
+        break;
+      case 'selected':
+        color = Colors.blue;
+        break;
+      case 'fixed': 
+        color = Colors.grey[400]!;
+        isSelectable = false;
+        break;
+      default:
+        color = Colors.grey;
+    }
+
+    return Expanded(
+      child: GestureDetector(
+        onTap: isSelectable ? () => _selectSeat(seatNo) : null,
+        child: Container(
+          width: 40,
+          height: 40,
+          margin: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: status == 'selected'
+                ? color.withValues(alpha:0.3)
+                : (status == 'fixed' ? color.withValues(alpha:0.8) : Colors.white),
+            border: Border.all(color: color, width: 1.5),
+            borderRadius: BorderRadius.circular(6),
           ),
-          itemCount: _seatMap.length,
-          itemBuilder: (context, index) {
-            final seatNo = _seatMap[index].number;
-            final status = _checkSeatStatus(seatNo);
-            
-            Color color;
-            switch (status) {
-              case 'libre':
-                color = Colors.green;
-                break;
-              case 'ocupado':
-                color = Colors.red;
-                break;
-              case 'selected':
-                color = Colors.blue;
-                break;
-              default:
-                color = Colors.grey;
-            }
-
-            return GestureDetector(
-              onTap: () => _selectSeat(seatNo),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.2),
-                  border: Border.all(color: color),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Center(
-                  child: Text(
-                    seatNo.toString(),
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: color,
-                    ),
-                  ),
-                ),
+          child: Center(
+            child: Text(
+              status == 'fixed' ? '' : seatNo.toString(), 
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+                color: color,
               ),
-            );
-          },
+            ),
+          ),
         ),
-      ],
+      ),
     );
   }
 
-  Widget _buildPassengerForms() {
+  Widget buildRow(List<int?> seats, bool hasMiddleGap) {
+    List<Widget> row = [];
+    for (int? seatNo in seats) {
+      if (seatNo == null) {
+        row.add(const Expanded(child: SizedBox(width: 40 + 8))); 
+      } else {
+        row.add(buildSeat(seatNo));
+        if (hasMiddleGap && seats.indexOf(seatNo) == (seats.length / 2) - 1) {
+          row.add(const SizedBox(width: 24)); 
+        }
+      }
+    }
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: row,
+    );
+  }
+
+  Widget buildFloorPlan(List<int?> floorSeatsLayout, int seatsPerRow) {
+    List<Widget> floorRows = [];
+    for (int i = 0; i < (floorSeatsLayout.length / seatsPerRow).ceil(); i++) {
+      final startIndex = i * seatsPerRow;
+      final endIndex = (i + 1) * seatsPerRow;
+      final rowSeats = floorSeatsLayout.sublist(
+          startIndex, endIndex > floorSeatsLayout.length ? floorSeatsLayout.length : endIndex);
+      floorRows.add(buildRow(rowSeats, seatsPerRow == 4));
+      floorRows.add(const SizedBox(height: 8));
+    }
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Datos de los pasajeros',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: floorRows,
+    );
+  }
+
+  
+  List<int?> firstFloorLayout = [
+    1, 2, null, 3, 
+    4, 5, null, 6, 
+    7, 8, null, 9, 
+    10, 11, null, 12, 
+  ];
+
+  List<int?> secondFloorLayout = [
+    13, 14, 15,16,
+    17, 18, 19,20, 
+    21, 22, null, null,
+    23, 24, null, null, 
+    25, 26, 27,28,
+    29, 30, 31,32,
+    33, 34, 35,36,
+    37, 38, 39,40,
+    41, 42, 43,44,
+    45, 46, 47,48,null,
+
+  ];
+
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.center,
+    children: [
+      const Text(
+        'Seleccione sus asientos',
+        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      ),
+      const SizedBox(height: 8),
+      const Icon(Icons.directions_bus, size: 40), 
+      const SizedBox(height: 16),
+      Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.grey[200],
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey.shade400),
         ),
-        const SizedBox(height: 8),
-        ..._userSelectedSeatArray.asMap().entries.map((entry) {
-          final index = entry.key;
-          final pasajero = entry.value;
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const Text('Primer Piso', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            buildFloorPlan(firstFloorLayout, seatsPerRowFirstFloor),
+            if (secondFloorSeatsCount > 0) ...[
+              const SizedBox(height: 16),
+              const Text('Segundo Piso', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              buildFloorPlan(secondFloorLayout, seatsPerRowSecondFloor),
+            ],
+          ],
+        ),
+      ),
+      const SizedBox(height: 16),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _seatLegend(Colors.grey[400]!, 'Libre'),
+          _seatLegend(const Color(0xFFBF303C), 'Ocupado'),
+          _seatLegend(Colors.blue, 'Seleccionado'),
           
-          return Card(
-            margin: const EdgeInsets.only(bottom: 16),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Asiento ${pasajero.seatNo}',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Colors.red),
-                        onPressed: () => _removePassenger(index),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      ChoiceChip(
-                        label: const Text('DNI'),
-                        selected: pasajero.tipoDocumento == 'dni',
-                        onSelected: (selected) => 
-                            _setDocumentType(index, selected ? 'dni' : ''),
-                      ),
-                      const SizedBox(width: 8),
-                      ChoiceChip(
-                        label: const Text('Pasaporte'),
-                        selected: pasajero.tipoDocumento == 'pasaporte',
-                        onSelected: (selected) => 
-                            _setDocumentType(index, selected ? 'pasaporte' : ''),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    decoration: const InputDecoration(
-                      labelText: 'Número de Documento',
-                      border: OutlineInputBorder(),
-                    ),
-                    keyboardType: TextInputType.number,
-                    onChanged: (value) => 
-                        _userSelectedSeatArray[index].numeroDocumento = value,
-                    validator: (value) {
-                      if (pasajero.tipoDocumento == 'dni' && value?.length != 8) {
-                        return 'DNI debe tener 8 dígitos';
-                      }
-                      if (pasajero.tipoDocumento == 'pasaporte' && (value?.length ?? 0) < 6) {
-                        return 'Mínimo 6 caracteres';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  if (pasajero.tipoDocumento == 'dni')
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            decoration: const InputDecoration(
-                              labelText: 'Nombre Completo',
-                              border: OutlineInputBorder(),
-                            ),
-                            onChanged: (value) => 
-                                _userSelectedSeatArray[index].nombreCompleto = value,
-                          ),
-                        ),
-                        IconButton(
-                          icon: _buscandoDNI
-                              ? const CircularProgressIndicator()
-                              : const Icon(Icons.search),
-                          onPressed: () => _buscarDNI(index),
-                        ),
-                      ],
-                    )
-                  else
-                    TextFormField(
-                      decoration: const InputDecoration(
-                        labelText: 'Nombre Completo',
-                        border: OutlineInputBorder(),
-                      ),
-                      onChanged: (value) => 
-                          _userSelectedSeatArray[index].nombreCompleto = value,
-                    ),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    decoration: const InputDecoration(
-                      labelText: 'Edad',
-                      border: OutlineInputBorder(),
-                    ),
-                    keyboardType: TextInputType.number,
-                    onChanged: (value) => 
-                        _userSelectedSeatArray[index].edad = int.tryParse(value ?? ''),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }).toList(),
-      ],
-    );
-  }
+        ],
+      ),
+    ],
+  );
+}
 
-  Widget _buildResumen() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Resumen de Reserva',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            DataTable(
-              columns: const [
-                DataColumn(label: Text('Asiento')),
-                DataColumn(label: Text('Nombre')),
-                DataColumn(label: Text('Documento')),
-                DataColumn(label: Text('Precio')),
-              ],
-              rows: _userSelectedSeatArray.map((pasajero) {
-                return DataRow(cells: [
-                  DataCell(Text(pasajero.seatNo.toString())),
-                  DataCell(Text(pasajero.nombreCompleto)),
-                  DataCell(Text('${pasajero.tipoDocumento.toUpperCase()} ${pasajero.numeroDocumento}')),
-                  DataCell(Text('S/. ${_scheduleData['precio'].toStringAsFixed(2)}')),
-                ]);
-              }).toList(),
-            ),
-            const SizedBox(height: 16),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Text(
-                'Total: S/. ${(_scheduleData['precio'] * _userSelectedSeatArray.length).toStringAsFixed(2)}',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
+Widget _seatLegend(Color color, String text) {
+  return Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        width: 20,
+        height: 20,
+        decoration: BoxDecoration(
+          color: color.withValues(alpha:0.8),
+          border: Border.all(color: color, width: 1.5),
+          borderRadius: BorderRadius.circular(4),
         ),
       ),
-    );
-  }
+      const SizedBox(width: 8),
+      Text(text),
+    ],
+  );
+}
 
-  Widget _buildPaymentForm() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Datos de Pago',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              decoration: const InputDecoration(
-                labelText: 'Número de Tarjeta',
-                border: OutlineInputBorder(),
+Widget _buildBusInfo(Map<String, dynamic> scheduleData, Map<String, dynamic> busInfo) {
+  final salida = scheduleData['terminalSalidaId']['nombreTerminal'] as String? ?? '';
+  final llegada = scheduleData['terminalLlegadaId']['nombreTerminal'] as String? ?? '';
+  final fechaSalida = scheduleData['fechaDeSalida'] != null
+      ? DateFormat('EEEE dd MMMM - HH:mm', 'es').format(DateTime.parse(scheduleData['fechaDeSalida']))
+      : '';
+  final duracion = scheduleData['duracionEnHoras']?.toString() ?? '';
+  final claseBus = busInfo['claseDeBus'] as String? ?? '';
+  final placaBus = busInfo['placaBus'] as String? ?? '';
+  final precio = scheduleData['precio']?.toStringAsFixed(2) ?? '0.00';
+
+  return Card(
+    elevation: 2,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    child: Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.location_on, color: Color(0xFFBF303C)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '$salida → $llegada',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFBF303C)),
+                ),
               ),
-              keyboardType: TextInputType.number,
-              onChanged: _formatCardNumber,
-              validator: (value) =>
-                  value?.length != 19 ? 'Número inválido' : null,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              decoration: const InputDecoration(
-                labelText: 'Nombre en la Tarjeta',
-                border: OutlineInputBorder(),
-              ),
-              onChanged: (value) => _nombreTarjeta = value,
-            ),
-            const SizedBox(height: 16),
-            Row(
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Icon(Icons.calendar_today_outlined, color: Colors.grey),
+              const SizedBox(width: 8),
+              Text('Salida: $fechaSalida'),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Icon(Icons.timer_outlined, color: Colors.grey),
+              const SizedBox(width: 8),
+              Text('Duración: $duracion horas'),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Icon(Icons.directions_bus, color: Colors.grey),
+              const SizedBox(width: 8),
+              Text('Bus: $claseBus ($placaBus)'),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              const Text('Precio:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(width: 8),
+              Text('S/. $precio', style: const TextStyle(fontSize: 16, color: Color(0xFFBF303C))),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+Widget _buildPassengerForms() {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text(
+        'Datos de los pasajeros',
+        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      ),
+      const SizedBox(height: 16),
+      ..._userSelectedSeatArray.asMap().entries.map((entry) {
+        final index = entry.key;
+        final pasajero = entry.value;
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 16),
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: TextFormField(
-                    decoration: const InputDecoration(
-                      labelText: 'Expiración (MM/AA)',
-                      border: OutlineInputBorder(),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Asiento ${pasajero.seatNo}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                     ),
-                    onChanged: _formatExpiry,
-                    validator: (value) =>
-                        value?.length != 5 ? 'Formato inválido' : null,
-                  ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.red),
+                      onPressed: () => _removePassenger(index),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: TextFormField(
-                    decoration: const InputDecoration(
-                      labelText: 'CVV',
-                      border: OutlineInputBorder(),
+                const Divider(height: 20, thickness: 0.5, color: Colors.grey),
+                const Text('Tipo de Documento', style: TextStyle(fontWeight: FontWeight.w500)),
+                Row(
+                  children: [
+                    Expanded(
+                      child: RadioListTile<String>(
+                        title: const Text('DNI', style: TextStyle(fontSize: 14)),
+                        value: 'dni',
+                        groupValue: pasajero.tipoDocumento,
+                        onChanged: (value) => _setDocumentType(index, value!),
+                      ),
                     ),
-                    keyboardType: TextInputType.number,
-                    obscureText: true,
-                    onChanged: (value) => _cvv = value,
-                    validator: (value) =>
-                        value?.length != 3 ? 'CVV inválido' : null,
+                    Expanded(
+                      child: RadioListTile<String>(
+                        title: const Text('Pasaporte', style: TextStyle(fontSize: 14)),
+                        value: 'pasaporte',
+                        groupValue: pasajero.tipoDocumento,
+                        onChanged: (value) => _setDocumentType(index, value!),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  decoration: const InputDecoration(
+                    labelText: 'Número de Documento',
+                    border: OutlineInputBorder(),
                   ),
+                  keyboardType: TextInputType.number,
+                  onChanged: (value) =>
+                      _userSelectedSeatArray[index].numeroDocumento = value,
+                  validator: (value) {
+                    if (pasajero.tipoDocumento == 'dni' && value?.length != 8) {
+                      return 'DNI debe tener 8 dígitos';
+                    }
+                    if (pasajero.tipoDocumento == 'pasaporte' && (value?.length ?? 0) < 6) {
+                      return 'Mínimo 6 caracteres';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  decoration: InputDecoration(
+                    labelText: 'Nombre Completo',
+                    border: const OutlineInputBorder(),
+                    suffixIcon: pasajero.tipoDocumento == 'dni'
+                        ? _buscandoDNI
+                            ? const Padding(
+                                padding: EdgeInsets.all(8.0),
+                                child: SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                ),
+                              )
+                            : IconButton(
+                                icon: const Icon(Icons.search),
+                                onPressed: () => _buscarDNI(index),
+                              )
+                        : null,
+                  ),
+                  controller: _nombreControllers[index], 
+                  onChanged: (value) => _userSelectedSeatArray[index].nombreCompleto = value,
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  decoration: const InputDecoration(
+                    labelText: 'Edad',
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.number,
+                  onChanged: (value) =>
+                      _userSelectedSeatArray[index].edad = int.tryParse(value),
                 ),
               ],
             ),
-          ],
-        ),
+          ),
+        );
+      }),
+    ],
+  );
+}
+
+Widget _buildResumen(Map<String, dynamic> scheduleData, List<Pasajero> userSelectedSeatArray) {
+  final salida = scheduleData['terminalSalidaId']['nombreTerminal'] as String? ?? '';
+  final llegada = scheduleData['terminalLlegadaId']['nombreTerminal'] as String? ?? '';
+  final fechaSalida = scheduleData['fechaDeSalida'] != null
+      ? DateFormat('EEEE dd MMMM - HH:mm', 'es').format(DateTime.parse(scheduleData['fechaDeSalida']))
+      : '';
+  final precioPorAsiento = scheduleData['precio']?.toStringAsFixed(2) ?? '0.00';
+  final totalPrecio = (scheduleData['precio'] * userSelectedSeatArray.length).toStringAsFixed(2);
+
+  return Card(
+    elevation: 2,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    child: Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Resumen de Reserva',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '$salida → $llegada',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Color(0xFFBF303C)),
+          ),
+          Text(
+            'Salida: $fechaSalida',
+            style: const TextStyle(color: Colors.grey),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Detalles de los Pasajeros',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: userSelectedSeatArray.length,
+            separatorBuilder: (context, index) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              final pasajero = userSelectedSeatArray[index];
+              return Card(
+                elevation: 1,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.person_outline, color: Colors.grey),
+                          const SizedBox(width: 8),
+                          Text(
+                            pasajero.nombreCompleto.isNotEmpty ? pasajero.nombreCompleto : 'Pasajero ${index + 1}',
+                            style: const TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Icon(Icons.event_seat_outlined, color: Colors.grey),
+                          const SizedBox(width: 8),
+                          Text('Asiento: ${pasajero.seatNo}'),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Icon(Icons.badge_outlined, color: Colors.grey),
+                          const SizedBox(width: 8),
+                          Text('Documento: ${pasajero.tipoDocumento.toUpperCase()} ${pasajero.numeroDocumento}'),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          const Text('Precio:', style: TextStyle(fontWeight: FontWeight.bold)),
+                          const SizedBox(width: 8),
+                          Text('S/. $precioPorAsiento'),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+          const Divider(),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Total:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text('S/. $totalPrecio', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFBF303C))),
+            ],
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
+
+Widget _buildPaymentForm() {
+  return Card(
+    elevation: 2,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    child: Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Datos de Pago',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            decoration: const InputDecoration(
+              labelText: 'Número de Tarjeta',
+              hintText: 'XXXX-XXXX-XXXX-XXXX',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.credit_card_outlined),
+            ),
+            keyboardType: TextInputType.number,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(19), 
+              _CardNumberFormatter(), 
+            ],
+            onChanged: _formatCardNumber,
+            validator: (value) =>
+                value?.length != 19 ? 'Número de tarjeta inválido' : null,
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            decoration: const InputDecoration(
+              labelText: 'Nombre en la Tarjeta',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.person_outline),
+            ),
+            onChanged: (value) => _nombreTarjeta = value,
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  decoration: const InputDecoration(
+                    labelText: 'Expiración (MM/AA)',
+                    hintText: 'MM/AA',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.calendar_month_outlined),
+                  ),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(4), 
+                    _ExpiryDateFormatter(), 
+                  ],
+                  onChanged: _formatExpiry,
+                  validator: (value) =>
+                      value?.length != 5 ? 'Formato inválido (MM/AA)' : null,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: TextFormField(
+                  decoration: const InputDecoration(
+                    labelText: 'CVV',
+                    hintText: 'XXX',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.security_outlined),
+                  ),
+                  keyboardType: TextInputType.number,
+                  obscureText: true,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(3),
+                  ],
+                  onChanged: (value) => _cvv = value,
+                  validator: (value) =>
+                      value?.length != 3 ? 'CVV inválido (3 dígitos)' : null,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
   Widget _buildBottomButtons() {
     if (_mostrarFormaPago) {
@@ -773,6 +1189,66 @@ Future<void> _generarPDF() async {
         onPressed: _userSelectedSeatArray.isEmpty ? null : _bookNow,
         child: const Text('Reservar Ahora'),
       ),
+    );
+  }
+}
+
+
+
+class _CardNumberFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final newText = StringBuffer();
+    var selectionIndex = newValue.selection.end;
+    var usedSubstringIndex = 0;
+
+    for (var i = 0; i < min(newValue.text.length, 16); i++) {
+      if (usedSubstringIndex >= newValue.text.length) break;
+      final currentChar = newValue.text[usedSubstringIndex];
+      if (currentChar != ' ') {
+        newText.write(currentChar);
+        if ((i + 1) % 4 == 0 && i < 15) {
+          newText.write(' ');
+          if (selectionIndex > usedSubstringIndex + 1) selectionIndex++;
+        }
+      }
+      usedSubstringIndex++;
+    }
+
+    return TextEditingValue(
+      text: newText.toString(),
+      selection: TextSelection.collapsed(offset: newText.length > 0 ? min(newText.length, selectionIndex) : 0),
+    );
+  }
+}
+
+class _ExpiryDateFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final newText = StringBuffer();
+    var selectionIndex = newValue.selection.end;
+    var usedSubstringIndex = 0;
+
+    for (var i = 0; i < min(newValue.text.length, 4); i++) {
+      if (usedSubstringIndex >= newValue.text.length) break;
+      final currentChar = newValue.text[usedSubstringIndex];
+      newText.write(currentChar);
+      if ((i + 1) % 2 == 0 && i < 3 && newText.length < 5 && currentChar != '/') {
+        newText.write('/');
+        if (selectionIndex > usedSubstringIndex + 1) selectionIndex++;
+      }
+      usedSubstringIndex++;
+    }
+
+    return TextEditingValue(
+      text: newText.toString(),
+      selection: TextSelection.collapsed(offset: min(newText.length, selectionIndex)),
     );
   }
 }

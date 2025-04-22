@@ -175,7 +175,6 @@ Future<void> _updateProfile() async {
   }
 }
 
- 
 
   void _showImagePicker(BuildContext context) {
     showModalBottomSheet(
@@ -276,7 +275,7 @@ Future<void> _updateProfile() async {
   }
 
   Widget _buildUserProfile(BuildContext context, dynamic user) {
-    // final authProvider = Provider.of<AuthProvider>(context);
+    final authProvider = Provider.of<AuthProvider>(context);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(

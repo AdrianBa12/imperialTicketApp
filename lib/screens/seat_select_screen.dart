@@ -26,7 +26,7 @@ class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
             Padding(
               padding: const EdgeInsets.all(8.0),
               child: Text(
-                'Bus: ${selectedBus['idBus']} - Precio: \$${selectedBus['precio']}',
+                'Bus: ${selectedBus['idBus']} - Precios: \$${selectedBus['precio']}',
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w500,
